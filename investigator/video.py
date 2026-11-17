@@ -1,6 +1,7 @@
 import re
 import shutil
 import subprocess
+from html import escape
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from time import monotonic
@@ -179,12 +180,16 @@ def save_video(client, job, root: Path, key: str, story, voice: str):
                 raise RuntimeError("本机日语配音失败，请检查 say、ffmpeg 和日语语音。") from error
         final.replace(root / f"{key}.mp4")
         subtitles = Path(temp) / "captions.vtt"
-        cues = [
-            f"00:00:{i * 5:02}.000 --> 00:00:{(i + 1) * 5:02}.000\n{shot.narration}"
-            for i, shot in enumerate(story.shots)
-        ]
-        subtitles.write_text("WEBVTT\n\n" + "\n\n".join(cues) + "\n", encoding="utf-8")
+        subtitles.write_text(captions_vtt([shot.narration for shot in story.shots]), encoding="utf-8")
         subtitles.replace(root / f"{key}.vtt")
+
+
+def captions_vtt(lines: list[str]) -> str:
+    cues = [
+        f"00:00:{i * 5:02}.000 --> 00:00:{(i + 1) * 5:02}.000\n{escape(' '.join(line.split()), quote=False)}"
+        for i, line in enumerate(lines)
+    ]
+    return "WEBVTT\n\n" + "\n\n".join(cues) + "\n"
 
 
 def local_voice_available(voice):

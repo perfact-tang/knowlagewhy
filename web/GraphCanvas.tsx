@@ -4,6 +4,8 @@ import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { CSSProperties, PointerEvent } from 'react';
 import { kinds } from './domain';
 import type { Graph, GraphNode } from './domain';
+import { text } from './i18n';
+import type { Locale, MessageKey } from './i18n';
 
 type Position = { id: string; x: number; y: number; r: number; node: GraphNode };
 type Layout = ReturnType<typeof layout>;
@@ -63,12 +65,15 @@ interface Props {
   graph: Graph;
   previous?: Graph;
   example: boolean;
+  locale: Locale;
+  contentTag: string;
   vertical?: boolean;
   selected: string | null;
   select: (id: string | null) => void;
 }
 
-export function GraphCanvas({ graph, previous, example, vertical = false, selected, select }: Props) {
+export function GraphCanvas({ graph, previous, example, vertical = false, selected, select, locale, contentTag }: Props) {
+  const t = (key: MessageKey) => text(locale, key);
   const svg = useRef<SVGSVGElement>(null);
   const host = useRef<HTMLDivElement>(null);
   const drag = useRef<{ x: number; y: number; moved: boolean } | null>(null);
@@ -113,19 +118,20 @@ export function GraphCanvas({ graph, previous, example, vertical = false, select
 
   return (
     <div className="graph-body" ref={host}>
-      <div className="canvas-corner"><Crosshair size={13} /> <span>{example ? '示例图谱' : '关系视图'}</span></div>
-      <div className="canvas-tools" aria-label="图谱操作">
-        {old && <button title="重播图谱合并" aria-label="重播图谱合并" onClick={() => setMotion(v => v + 1)}><Shuffle size={15} /></button>}
-        <button title="放大" aria-label="放大图谱" onClick={() => zoom(1.22)}><Plus size={17} /></button>
-        <button title="缩小" aria-label="缩小图谱" onClick={() => zoom(1 / 1.22)}><Minus size={17} /></button>
-        <button title="重置视图" aria-label="重置图谱视图" onClick={() => setCamera({ x: 0, y: 0, scale: 1 })}><Maximize size={14} /></button>
+      <div className="canvas-corner"><Crosshair size={13} /> <span>{t(example ? 'sampleGraph' : 'relationships')}</span></div>
+      <div className="canvas-tools" aria-label={t('graphTools')}>
+        {old && <button title={t('replay')} aria-label={t('replay')} onClick={() => setMotion(v => v + 1)}><Shuffle size={15} /></button>}
+        <button title={t('zoomIn')} aria-label={t('zoomIn')} onClick={() => zoom(1.22)}><Plus size={17} /></button>
+        <button title={t('zoomOut')} aria-label={t('zoomOut')} onClick={() => zoom(1 / 1.22)}><Minus size={17} /></button>
+        <button title={t('resetView')} aria-label={t('resetView')} onClick={() => setCamera({ x: 0, y: 0, scale: 1 })}><Maximize size={14} /></button>
       </div>
       <svg
         className="graph-svg"
         ref={svg}
         viewBox={`${-data.w / 2} ${-data.h / 2} ${data.w} ${data.h}`}
         role="group"
-        aria-label={graph.title + '知识图谱'}
+        aria-label={graph.title}
+        lang={contentTag}
         onPointerDown={event => {
           if (event.button !== 0 || (event.target instanceof Element && event.target.closest('.graph-node'))) return;
           drag.current = { x: event.clientX, y: event.clientY, moved: false };
@@ -157,7 +163,9 @@ export function GraphCanvas({ graph, previous, example, vertical = false, select
               const island = !focused || isFocused || neighbors.has(n.id);
               const showLabel = example || island && (data.marks.length < 17 || n.node.kind === 'topic' || isFocused
                 || data.degree[n.id] >= 4 || camera.scale > 1.32);
-              const label = n.node.label.length > 14 ? n.node.label.slice(0, 13) + '…' : n.node.label;
+              const length = contentTag === 'en' ? 23 : 14;
+              const segments = Array.from(n.node.label);
+              const label = segments.length > length ? segments.slice(0, length - 1).join('') + '…' : n.node.label;
               return <g key={n.id} transform={`translate(${n.x} ${n.y})`}
                 role="button" tabIndex={0} aria-label={n.node.label} aria-pressed={selected === n.id}
                 className={`graph-node ${isFocused ? 'node-active' : ''} ${island ? '' : 'node-faded'}`}

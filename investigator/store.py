@@ -1,3 +1,4 @@
+import json
 from uuid import uuid4
 
 from neo4j import GraphDatabase
@@ -26,6 +27,7 @@ class Store:
             ("kw_snapshot_id", "KWGraph"),
             ("kw_node_id", "KWNode"),
             ("kw_source_id", "KWSource"),
+            ("kw_translation_id", "KWTranslation"),
         ):
             self.query(f"CREATE CONSTRAINT {name} IF NOT EXISTS FOR (n:{label}) REQUIRE n.key IS UNIQUE")
 
@@ -58,7 +60,8 @@ class Store:
             "properties(r)"
             if private
             else """r{.key, .filename, .title, .status,
-            .active, .progress, .error, .created_at, .start, .end, .video_status, .video_title, .narration}"""
+            .active, .progress, .progress_detail, .error, .error_code, .created_at,
+            .start, .end, .video_status, .video_title, .narration}"""
         )
         rows = self.query(
             f"""MATCH (r:KWInvestigation {{key: $key}})
@@ -78,7 +81,7 @@ class Store:
                 """MATCH (r:KWInvestigation {key: $key})
             SET r.attempt = r.attempt + 1
             WITH r WHERE r.status = $expected
-            SET r.status = 'running', r.error = null, r.progress = null
+            SET r.status = 'running', r.error = null, r.error_code = null, r.progress = null, r.progress_detail = null
             RETURN r.key""",
                 key=key,
                 expected=expected,
@@ -178,3 +181,23 @@ class Store:
         for item in data["nodes"] + data["sources"]:
             item.pop("key", None)
         return Graph.model_validate(data)
+
+    def translation(self, key: str, section: str, language: str) -> dict[str, str] | None:
+        rows = self.query(
+            "MATCH (t:KWTranslation {key: $id}) RETURN t.text AS text",
+            id=f"{key}:{section}:{language}",
+        )
+        return json.loads(rows[0]["text"]) if rows else None
+
+    def save_translation(self, key: str, section: str, language: str, text: dict[str, str]):
+        self.query(
+            """MATCH (r:KWInvestigation {key: $key})
+            MERGE (t:KWTranslation {key: $id})
+            SET t.section = $section, t.language = $language, t.text = $text
+            MERGE (r)-[:KW_HAS_TRANSLATION]->(t)""",
+            key=key,
+            id=f"{key}:{section}:{language}",
+            section=section,
+            language=language,
+            text=json.dumps(text, ensure_ascii=False),
+        )

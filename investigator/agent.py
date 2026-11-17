@@ -33,6 +33,14 @@ class ProviderError(RuntimeError):
         super().__init__(f"ai& 请求失败（HTTP {self.status} · {self.code}）")
 
 
+def aiand_client(settings) -> httpx.Client:
+    return httpx.Client(
+        base_url="https://api.aiand.com",
+        headers={"Authorization": f"Bearer {settings.aiand_api_key.get_secret_value()}"},
+        timeout=httpx.Timeout(110, connect=12),
+    )
+
+
 def require_success(response: httpx.Response):
     if not response.is_success:
         raise ProviderError(response)
@@ -152,11 +160,11 @@ class InvestigationEnvironment:
             args = json.loads(action["arguments"])
             if name == "search_web":
                 query = str(args.get("query", ""))[:220]
-                self.progress(f"搜索公开资料 · {query}")
+                self.progress("search", query)
                 result = self.research.search(query)
             else:
                 source_id = str(args.get("source_id", ""))[:80]
-                self.progress("读取并核对来源正文")
+                self.progress("read", "")
                 result = self.research.open(source_id)
         except (ValueError, ValidationError, httpx.HTTPError, OSError, KeyError) as error:
             if isinstance(error, ValidationError):
